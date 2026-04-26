@@ -1,0 +1,14 @@
+[Unit]
+Description=JobRadar Telegram Bot
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/JobRadar
+EnvironmentFile=/opt/JobRadar/.env
+ExecStart=/opt/JobRadar/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
