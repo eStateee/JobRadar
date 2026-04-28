@@ -17,6 +17,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 async def init_db():
+    import db.models  # Ensure models are registered with Base
     async with engine.begin() as conn:
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
