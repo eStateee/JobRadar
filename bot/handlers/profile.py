@@ -146,7 +146,8 @@ async def handle_text_filter_update(message: Message, state: FSMContext):
     async with async_session() as session:
         profile = await get_or_create_profile(session)
         if not profile.filters_summary_json:
-            await msg.edit_text("У вас еще нет фильтров. Загрузите их сначала файлом.", reply_markup=get_main_menu())
+            await msg.delete()
+            await message.answer("У вас еще нет фильтров. Загрузите их сначала файлом.", reply_markup=get_main_menu())
             await state.clear()
             return
             
@@ -156,9 +157,11 @@ async def handle_text_filter_update(message: Message, state: FSMContext):
             updated_filters = await update_filters(current_filters, message.text)
             profile.filters_summary_json = updated_filters.model_dump()
             await session.commit()
-            await msg.edit_text("✅ Фильтры успешно обновлены! Проверьте через /profile", reply_markup=get_main_menu())
+            await msg.delete()
+            await message.answer("✅ Фильтры успешно обновлены! Проверьте через /profile", reply_markup=get_main_menu())
             await state.clear()
         except Exception as e:
             logger.error(f"Failed to update filters: {e}")
-            await msg.edit_text("❌ Ошибка при обновлении фильтров.", reply_markup=get_main_menu())
+            await msg.delete()
+            await message.answer("❌ Ошибка при обновлении фильтров.", reply_markup=get_main_menu())
             await state.clear()

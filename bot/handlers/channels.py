@@ -112,7 +112,8 @@ async def process_new_channel(message: Message, state: FSMContext):
     
     exists = await check_channel_exists(username)
     if not exists:
-        await msg.edit_text(f"❌ Канал @{username} не найден или закрыт (приватный).", reply_markup=get_main_menu())
+        await msg.delete()
+        await message.answer(f"❌ Канал @{username} не найден или закрыт (приватный).", reply_markup=get_main_menu())
         await state.clear()
         return
         
@@ -120,7 +121,8 @@ async def process_new_channel(message: Message, state: FSMContext):
         result = await session.execute(select(Channel).where(Channel.username == username))
         existing = result.scalar_one_or_none()
         if existing:
-            await msg.edit_text(f"⚠️ Канал @{username} уже в списке!", reply_markup=get_main_menu())
+            await msg.delete()
+            await message.answer(f"⚠️ Канал @{username} уже в списке!", reply_markup=get_main_menu())
             await state.clear()
             return
             
@@ -131,5 +133,6 @@ async def process_new_channel(message: Message, state: FSMContext):
         session.add(new_channel)
         await session.commit()
         
-    await msg.edit_text(f"✅ Канал @{username} успешно добавлен!", reply_markup=get_main_menu())
+    await msg.delete()
+    await message.answer(f"✅ Канал @{username} успешно добавлен!", reply_markup=get_main_menu())
     await state.clear()
