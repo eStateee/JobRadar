@@ -25,11 +25,17 @@ dp.message.middleware(AllowlistMiddleware(config.admin_tg_id))
 dp.callback_query.middleware(AllowlistMiddleware(config.admin_tg_id))
 
 def setup_routers():
-    from bot.handlers import admin, channels, pipeline_cmds, profile
+    from bot.handlers import admin, channels, pipeline_cmds, profile, common
+    # Регистрируем общие команды (start, cancel)
+    dp.include_router(common.router)
+    # Административные команды
     dp.include_router(admin.router)
-    dp.include_router(channels.router)
-    dp.include_router(pipeline_cmds.router)
+    # Команды профиля
     dp.include_router(profile.router)
+    # Команды пайплайна (run, status)
+    dp.include_router(pipeline_cmds.router)
+    # Роутер каналов должен быть последним, если он перехватывает текст
+    dp.include_router(channels.router)
 
 def init_bot():
     setup_routers()

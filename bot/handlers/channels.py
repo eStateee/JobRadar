@@ -1,7 +1,7 @@
 import httpx
 from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command, StateFilter
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,8 @@ from db.database import async_session
 from db.models import Channel
 from bot.config import config
 import logging
+from bot.keyboards.inline import get_channel_inline_keyboard, get_add_channel_menu
+from bot.keyboards.reply import get_cancel_menu, get_main_menu
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,9 @@ async def check_channel_exists(username: str) -> bool:
         return False
 
 @router.message(Command("channels"))
-async def cmd_channels(message: Message):
+@router.message(F.text == "📢 Каналы")
+async def cmd_channels(message: Message, state: FSMContext):
+    await state.clear()
     async with async_session() as session:
         result = await session.execute(select(Channel))
         channels = result.scalars().all()
@@ -37,7 +41,8 @@ async def cmd_channels(message: Message):
     if not channels:
         await message.answer(
             "Список каналов пуст.\n"
-            "Чтобы добавить канал, отправьте его юзернейм или ссылку (например: @it_jobs_ru)."
+            "Нажмите кнопку ниже, чтобы добавить канал.",
+            reply_markup=get_add_channel_menu()
         )
         return
 
@@ -46,15 +51,9 @@ async def cmd_channels(message: Message):
         status = "✅ Вкл" if ch.is_active else "❌ Выкл"
         text += f"• @{ch.username} - {status}\n"
         
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Вкл/Выкл", callback_data=f"toggle_{ch.id}"),
-                InlineKeyboardButton(text="Удалить", callback_data=f"delete_{ch.id}")
-            ]
-        ])
-        await message.answer(f"@{ch.username}", reply_markup=keyboard)
+        await message.answer(f"@{ch.username}", reply_markup=get_channel_inline_keyboard(ch.id))
 
-    await message.answer("Чтобы добавить новый, просто отправьте юзернейм или ссылку (напр. @it_jobs_ru).")
+    await message.answer("Управление каналами:", reply_markup=get_add_channel_menu())
 
 @router.callback_query(F.data.startswith("toggle_"))
 async def process_toggle(callback: CallbackQuery):
@@ -83,9 +82,18 @@ async def process_delete(callback: CallbackQuery):
         else:
             await callback.answer("Канал не найден", show_alert=True)
 
-@router.message(F.text)
-async def process_new_channel(message: Message):
-    # Very basic parsing. We expect user to send username with @ or link
+@router.callback_query(F.data == "add_channel")
+async def process_add_channel_btn(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(ChannelState.waiting_for_channel)
+    await callback.message.answer(
+        "➕ <b>Добавление канала</b>\n\n"
+        "Отправьте юзернейм или ссылку (например: @it_jobs_ru или https://t.me/it_jobs_ru).",
+        reply_markup=get_cancel_menu()
+    )
+    await callback.answer()
+
+@router.message(ChannelState.waiting_for_channel, F.text)
+async def process_new_channel(message: Message, state: FSMContext):
     text = message.text.strip()
     username = None
     
@@ -96,23 +104,24 @@ async def process_new_channel(message: Message):
     elif 't.me/s/' in text:
         username = text.split('t.me/s/')[-1].split('/')[0]
         
-    # Ignore if it doesn't look like a channel or is a command we didn't handle
     if not username:
+        await message.answer("❌ Неверный формат. Попробуйте еще раз или нажмите Отмена.")
         return
 
-    msg = await message.answer(f"Проверяю канал @{username}...")
+    msg = await message.answer(f"⏳ Проверяю канал @{username}...")
     
     exists = await check_channel_exists(username)
     if not exists:
-        await msg.edit_text(f"Канал @{username} не найден или закрыт (приватный).")
+        await msg.edit_text(f"❌ Канал @{username} не найден или закрыт (приватный).", reply_markup=get_main_menu())
+        await state.clear()
         return
         
     async with async_session() as session:
-        # Check if already exists
         result = await session.execute(select(Channel).where(Channel.username == username))
         existing = result.scalar_one_or_none()
         if existing:
-            await msg.edit_text(f"Канал @{username} уже в списке!")
+            await msg.edit_text(f"⚠️ Канал @{username} уже в списке!", reply_markup=get_main_menu())
+            await state.clear()
             return
             
         new_channel = Channel(
@@ -122,4 +131,5 @@ async def process_new_channel(message: Message):
         session.add(new_channel)
         await session.commit()
         
-    await msg.edit_text(f"Канал @{username} успешно добавлен!")
+    await msg.edit_text(f"✅ Канал @{username} успешно добавлен!", reply_markup=get_main_menu())
+    await state.clear()
