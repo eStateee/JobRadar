@@ -1,8 +1,12 @@
 import asyncio
 import logging
+from bot.logger_config import setup_logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.main_bot import init_bot
 from db.database import init_db, async_session
+
+# Инициализируем логирование до импорта других модулей
+setup_logging()
 
 async def scheduled_pipeline():
     try:

@@ -2,14 +2,11 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import ErrorEvent
 from bot.config import config
 from bot.middlewares.allowlist import AllowlistMiddleware
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logger = logging.getLogger(__name__)
 
 # Initialize Bot
 bot = Bot(
@@ -39,4 +36,13 @@ def setup_routers():
 
 def init_bot():
     setup_routers()
+    
+    # Глобальный обработчик ошибок
+    @dp.errors()
+    async def global_error_handler(event: ErrorEvent):
+        logger.error(
+            f"Необработанная ошибка Aiogram: {event.exception}",
+            exc_info=event.exception
+        )
+
     return bot, dp

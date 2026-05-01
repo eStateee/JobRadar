@@ -40,6 +40,7 @@ class TelegramCollector:
     async def _fetch_page(self, url: str, _retry: int = 0) -> str:
         """Загрузка страницы с задержкой и ограниченным retry при 429."""
         await asyncio.sleep(random.uniform(1.0, 3.0))
+        logger.debug(f"Fetching URL: {url}")
         try:
             response = await self.client.get(url)
             response.raise_for_status()
@@ -47,7 +48,7 @@ class TelegramCollector:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 and _retry < _MAX_RETRY_429:
                 wait = 10 * (_retry + 1)
-                logger.warning(f"Rate limited on {url}. Waiting {wait}s (attempt {_retry + 1}/{_MAX_RETRY_429})...")
+                logger.info(f"Rate limited (429) on {url}. Waiting {wait}s (attempt {_retry + 1}/{_MAX_RETRY_429})...")
                 await asyncio.sleep(wait)
                 return await self._fetch_page(url, _retry=_retry + 1)
             logger.error(f"HTTP error for {url}: {e}")
@@ -111,6 +112,7 @@ class TelegramCollector:
             return 0
 
         posts = self._parse_html(html, channel.username)
+        logger.info(f"{channel.username}: parsed {len(posts)} posts from page.")
         new_posts_count = 0
 
         max_msg_id = channel.last_collected_message_id or 0
@@ -121,11 +123,11 @@ class TelegramCollector:
 
             max_msg_id = max(max_msg_id, p['message_id'])
 
-            # Check for duplication (post_url unique constraint)
             existing = await self.session.execute(
                 select(Vacancy).where(Vacancy.post_url == p['post_url'])
             )
             if existing.scalar_one_or_none():
+                logger.debug(f"Skipped duplicate post in {channel.username}: {p['message_id']}")
                 continue
 
             vacancy = Vacancy(
@@ -153,7 +155,7 @@ class TelegramCollector:
         Это гарантирует, что break сработает только когда все свежие
         посты уже обработаны.
         """
-        logger.info(f"Starting backfill for {channel.username}")
+        logger.info(f"=== START BACKFILL: {channel.username} ===")
         limit_date = datetime.utcnow() - timedelta(days=self.max_backfill_days)
         new_posts_count = 0
 
@@ -190,6 +192,7 @@ class TelegramCollector:
                 select(Vacancy).where(Vacancy.post_url == p['post_url'])
             )
             if existing.scalar_one_or_none():
+                logger.debug(f"Skipped duplicate post in {channel.username}: {p['message_id']}")
                 continue
 
             self.session.add(Vacancy(
@@ -227,6 +230,7 @@ class TelegramCollector:
                     select(Vacancy).where(Vacancy.post_url == p['post_url'])
                 )
                 if existing.scalar_one_or_none():
+                    logger.debug(f"Skipped duplicate post in {channel.username}: {p['message_id']}")
                     continue
 
                 self.session.add(Vacancy(
@@ -239,7 +243,7 @@ class TelegramCollector:
             current_before_id = min(p['message_id'] for p in posts)
             await self.session.commit()
 
-        logger.info(f"{channel.username}: backfill done, collected {new_posts_count} posts")
+        logger.info(f"=== END BACKFILL: {channel.username} | Collected {new_posts_count} posts ===")
         await self.session.commit()
         return new_posts_count
 

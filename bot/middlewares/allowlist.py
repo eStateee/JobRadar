@@ -20,6 +20,14 @@ class AllowlistMiddleware(BaseMiddleware):
         
         if not user:
             return await handler(event, data)
+            
+        text = ""
+        if isinstance(event, Message):
+            text = event.text or event.caption or "attachment/other"
+        elif hasattr(event, "data"):
+            text = event.data
+            
+        logger.info(f"Incoming update from user {user.id} | data: {text}")
         
         if user.id != self.allowed_id:
             logger.warning(f"Unauthorized access attempt from user {user.id}")

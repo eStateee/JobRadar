@@ -108,10 +108,12 @@ async def handle_document(message: Message):
     
     caption = (message.caption or "").lower()
     file_name = message.document.file_name.lower()
+    file_size = message.document.file_size or 0
     
     msg = await message.answer("⏳ Анализирую файл...")
     
     if "resume" in caption or "резюме" in caption or "resume" in file_name or "резюме" in file_name:
+        logger.info(f"File upload detected. Inferred type: RESUME. Name: {file_name}, Size: {file_size} bytes")
         try:
             summary = await extract_profile(content)
             async with async_session() as session:
@@ -125,6 +127,7 @@ async def handle_document(message: Message):
             await msg.edit_text("❌ Ошибка при обработке резюме.")
             
     elif "filter" in caption or "фильтр" in caption or "filter" in file_name or "пожелани" in file_name:
+        logger.info(f"File upload detected. Inferred type: FILTER. Name: {file_name}, Size: {file_size} bytes")
         try:
             filters = await extract_filters(content)
             async with async_session() as session:

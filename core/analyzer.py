@@ -37,6 +37,12 @@ async def get_llm_response(system_prompt: str, user_prompt: str, response_model)
         f"4. СТРОГО СОБЛЮДАЙ ЭТУ СХЕМУ: {schema}"
     )
     
+    logger.info("Request Start: Sending request to LLM.")
+    logger.debug(f"System Prompt:\n{full_system_prompt}")
+    logger.debug(f"User Prompt:\n{user_prompt}")
+    
+    start_time = asyncio.get_event_loop().time()
+    
     try:
         response = await client.chat.completions.create(
             model=config.llm_model,
@@ -48,11 +54,21 @@ async def get_llm_response(system_prompt: str, user_prompt: str, response_model)
             temperature=0.0  # Детерминированность — никакой креативности
         )
         
+        latency = asyncio.get_event_loop().time() - start_time
+        logger.info(f"Response received. Latency: {latency:.2f}s")
+        
         raw_content = response.choices[0].message.content
+        logger.debug(f"Raw Response:\n{raw_content}")
+        
         clean_content = clean_json_string(raw_content)
         
-        return response_model.model_validate_json(clean_content)
-        
+        try:
+            return response_model.model_validate_json(clean_content)
+        except Exception as validation_error:
+            # specifically for pydantic ValidationError or json decode errors
+            logger.error(f"Validation Error: {validation_error}\nRaw Content:\n{clean_content}")
+            raise
+            
     except Exception as e:
         raw_info = raw_content if 'raw_content' in locals() else 'Нет ответа'
         logger.error(f"Ошибка LLM или валидации: {e}\nОтвет LLM: {raw_info}")
