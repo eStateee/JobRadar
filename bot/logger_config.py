@@ -12,26 +12,34 @@ class SecretsFilter(logging.Filter):
         if config.llm_api_key:
             self.secrets.append(config.llm_api_key)
 
+    def _mask(self, obj):
+        """Рекурсивно (поверхностно) маскирует секреты в объекте."""
+        if isinstance(obj, str):
+            for secret in self.secrets:
+                if secret and secret in obj:
+                    obj = obj.replace(secret, "***")
+            return obj
+        elif isinstance(obj, dict):
+            return {k: self._mask(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return type(obj)(self._mask(i) for i in obj)
+        return obj
+
     def filter(self, record: logging.LogRecord) -> bool:
         if not self.secrets:
             return True
             
         # Маскируем секреты в самом сообщении
-        if isinstance(record.msg, str):
-            for secret in self.secrets:
-                if secret in record.msg:
-                    record.msg = record.msg.replace(secret, "***")
+        record.msg = self._mask(record.msg)
                     
         # Маскируем в аргументах, если они есть
         if record.args:
-            new_args = []
-            for arg in record.args:
-                if isinstance(arg, str):
-                    for secret in self.secrets:
-                        if secret in arg:
-                            arg = arg.replace(secret, "***")
-                new_args.append(arg)
-            record.args = tuple(new_args)
+            # record.args может быть либо кортежем (позиционные), либо словарем (именованные)
+            if isinstance(record.args, dict):
+                record.args = self._mask(record.args)
+            else:
+                # Сохраняем структуру кортежа
+                record.args = tuple(self._mask(arg) for arg in record.args)
             
         return True
 
